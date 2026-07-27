@@ -1,0 +1,72 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: cmd/gateway/Dockerfile
+    ports:
+      - "${GATEWAY_HTTP_PORT:-8080}:8080"
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      GATEWAY_HTTP_PORT: 8080
+      INFERENCE_GRPC_HOST: ai-inference
+      INFERENCE_GRPC_PORT: 50051
+      INFERENCE_TIMEOUT_SECONDS: ${INFERENCE_TIMEOUT_SECONDS:-30}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-omnimed}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omnimed}
+      POSTGRES_DB: ${POSTGRES_DB:-omnimed}
+      POSTGRES_SSLMODE: disable
+      JWT_SECRET: ${JWT_SECRET:-}
+    depends_on:
+      ai-inference:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    networks:
+      - omnimed
+
+  ai-inference:
+    build:
+      context: ./services/ai-inference
+      dockerfile: Dockerfile
+    ports:
+      - "50051:50051"
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      GRPC_HOST: 0.0.0.0
+      GRPC_PORT: 50051
+      MODEL_PATH: /models/omnimed_breast_ultrasound.onnx
+      MODEL_VERSION: ${MODEL_VERSION:-omnimed-breast-ultrasound-v1.0.0}
+    volumes:
+      - ./models:/models:ro
+    networks:
+      - omnimed
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-omnimed}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omnimed}
+      POSTGRES_DB: ${POSTGRES_DB:-omnimed}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-omnimed}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - omnimed
+
+networks:
+  omnimed:
+    driver: bridge
+
+volumes:
+  postgres_data:

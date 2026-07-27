@@ -1,0 +1,17 @@
+# Go
+/bin/
+*.exe
+*.test
+
+# Python
+services/ai-inference/.venv/
+services/ai-inference/**/__pycache__/
+services/ai-inference/**/*.pyc
+
+# Env
+.env
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

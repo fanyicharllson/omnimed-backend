@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package omnimed.triage.v1;
+
+option go_package = "github.com/fanyicharllson/omnimed-backend/pb/triage;triagepb";
+
+// TriageService exposes one RPC per supported diagnostic modality.
+// All RPCs share ImageRequest/DiagnosisResponse so new modalities
+// (skin, oral, ...) can be added as new RPCs without breaking existing
+// clients or changing wire-compatible message shapes.
+service TriageService {
+  // DiagnoseBreastCancer classifies a breast ultrasound image as
+  // benign, malignant, or normal.
+  rpc DiagnoseBreastCancer(ImageRequest) returns (DiagnosisResponse);
+
+  // Future modalities follow the same contract, e.g.:
+  // rpc DiagnoseSkin(ImageRequest) returns (DiagnosisResponse);
+  // rpc DiagnoseOral(ImageRequest) returns (DiagnosisResponse);
+}
+
+message ImageRequest {
+  // Raw encoded image bytes (e.g. PNG/JPEG), not a decoded tensor.
+  bytes image_data = 1;
+
+  // MIME type of image_data, e.g. "image/png", "image/jpeg".
+  string content_type = 2;
+
+  // Caller-supplied correlation ID, echoed back in DiagnosisResponse
+  // for tracing across the gateway <-> inference boundary.
+  string request_id = 3;
+}
+
+// ClassConfidence is the predicted probability for a single class label.
+message ClassConfidence {
+  string label = 1;
+  float confidence = 2;
+}
+
+message DiagnosisResponse {
+  // Highest-confidence class label, e.g. "malignant".
+  string predicted_class = 1;
+
+  // Confidence score per class, e.g. benign/malignant/normal.
+  repeated ClassConfidence class_confidences = 2;
+
+  // Identifies which model produced this prediction, e.g.
+  // "omnimed_breast_ultrasound-v1.0.0".
+  string model_version = 3;
+
+  // Echoed from the request for correlation.
+  string request_id = 4;
+}

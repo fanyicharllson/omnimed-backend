@@ -1,70 +1,140 @@
 # OmniMed AI - Core Backend & AI Microservices 🏥
 
-The distributed backend infrastructure for OmniMed AI, an automated multi-disease triage and diagnostic ecosystem. This repository contains the high-concurrency Go API gateway, the event-driven RabbitMQ messaging topology, and the high-performance Python FastAPI/gRPC inference engines.
+The distributed backend infrastructure for OmniMed AI, an automated multi-disease triage and diagnostic ecosystem. This repository contains the Go API gateway and the Python FastAPI/gRPC inference engine, starting with breast cancer ultrasound classification (skin and oral cancer follow the same pattern).
 
 Designed like a CTO. Executed like an engineer. Shipped like a founder.
 
 ## 🏗️ System Architecture
 
-OmniMed bypasses traditional monolithic REST bottlenecks by utilizing an event-driven, decoupled microservices paradigm optimized for high scalability and low-resource edge deployment.
-
-
-
+```text
 ┌─────────────────────────┐
-│ Flutter Mobile Client │
+│   Client (HTTP upload)  │
 └────────────┬────────────┘
-│
-▼ (gRPC / HTTP/2)
+             │
+             ▼ (multipart/form-data over HTTP)
 ┌─────────────────────────┐
-│ Go Gateway Service │────► [ PostgreSQL ]
+│   Go Gateway Service     │────► [ PostgreSQL ]  (placeholder, not wired yet)
+│   cmd/gateway            │
 └────────────┬────────────┘
-│
-┌──────────────┴──────────────┐
-│ │
-▼ (Direct gRPC Stream) ▼ (Publish Event)
-┌─────────────────────────┐ ┌─────────────────────────┐
-│ Python AI Service (ONNX)│ │ RabbitMQ Job Queue │
-│ (FastAPI Framework) │ └─────────────────────────┘
+             │
+             ▼ (gRPC / protobuf — TriageService)
+┌─────────────────────────┐
+│  Python AI Inference     │
+│  services/ai-inference   │
+│  (FastAPI health + gRPC) │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│  ONNX Runtime            │
+│  omnimed_breast_ultrasound.onnx │
 └─────────────────────────┘
+```
 
 ### Component Breakdown
-1. **Core Orchestrator (Go):** Handles user session state, strict Role-Based Access Control (RBAC) via JWTs, medical log history, and acts as the entry reverse-proxy.
-2. **AI Inference Service (Python/FastAPI):** A high-performance gRPC worker wrapper that accepts raw binary image streams, reconstructs image tensors, and passes them to optimized ONNX models.
-3. **Message Broker (RabbitMQ):** Ensures eventual consistency and system resilience during high clinical loads by queueing heavy data diagnostic pipelines asynchronously.
+
+1. **Go Gateway (`cmd/gateway`)** — reverse-proxy entrypoint. Accepts an image upload over HTTP (`POST /v1/diagnose/breast-cancer`), forwards the raw bytes to the AI inference service over gRPC, and returns the diagnosis as JSON. Auth is currently a stubbed pass-through middleware (`internal/gateway/delivery/http/middleware`), structured so real JWT/RBAC drops in without touching routes or handlers.
+2. **Python AI Inference Service (`services/ai-inference`)** — loads `omnimed_breast_ultrasound.onnx` with ONNX Runtime, implements the same `TriageService` gRPC contract, and handles image preprocessing (resize to 224x224, ImageNet mean/std normalization).
+3. **PostgreSQL** — present in `docker-compose.yml` for local dev, with a placeholder connection config in `internal/config`. No repository uses it yet; there's no persistence need until user accounts / medical logs are added.
+
+## 📁 Repository Layout
+
+```text
+api/proto/triage.proto        # TriageService contract (shared by Go + Python)
+cmd/gateway/                  # Go gateway entrypoint + Dockerfile
+internal/
+  gateway/
+    delivery/http/            # router, handlers, stub auth middleware
+    usecase/                  # request validation + orchestration
+    repository/grpc/          # gRPC client to the inference service
+  config/                     # Viper-based env config (+ placeholder Postgres DSN)
+  logger/                     # structured (slog) JSON logging
+pb/triage/                    # generated Go protobuf/gRPC stubs
+services/ai-inference/
+  app/
+    main.py                   # entrypoint: starts gRPC server + health FastAPI app
+    config.py                 # pydantic-settings env config
+    logging_config.py         # structured JSON logging
+    grpc_server.py            # TriageService servicer implementation
+    inference/                # ONNX model wrapper + preprocessing
+    pb/                       # generated Python protobuf/gRPC stubs
+  requirements.txt
+  Dockerfile
+models/
+  omnimed_breast_ultrasound.onnx   # 3-class (benign/malignant/normal) ONNX model
+docker-compose.yml             # gateway + ai-inference + postgres
+Makefile                       # proto generation, build, run, docker shortcuts
+```
 
 ## 📊 Diagnostic Capabilities & Modalities
 
-| Target Pathology | Clinical Modality / Input | Diagnostic Approach | Dataset Core |
+| Target Pathology | Clinical Modality / Input | Diagnostic Approach | Status |
 | :--- | :--- | :--- | :--- |
-| **Skin Cancer** | Surface Macroscopic Photo | Analyzes lesion shape asymmetry, irregular borders, and color textures. | HAM10000 / ISIC |
-| **Oral Cancer** | High-Flash Intrabuccal Photo | Screens for mouth ulcers, leukoplakia (white patches), and mucosal lesions. | Oral Cancer Dataset |
-| **Breast Cancer** | Uploaded Ultrasound Scan / Mammogram | Segments deep tissue architecture to classify anomalies as benign or malignant. | BUSI Dataset |
+| **Breast Cancer** | Uploaded Ultrasound Scan | Classifies benign / malignant / normal via ONNX CNN | ✅ Implemented |
+| **Skin Cancer** | Surface Macroscopic Photo | Lesion shape, border, and texture analysis | 🔜 Planned — same `TriageService` pattern (`DiagnoseSkin`) |
+| **Oral Cancer** | High-Flash Intrabuccal Photo | Screens for ulcers, leukoplakia, mucosal lesions | 🔜 Planned — same `TriageService` pattern (`DiagnoseOral`) |
+
+Adding a new modality means adding a new RPC to `TriageService` (e.g. `DiagnoseSkin(ImageRequest) returns (DiagnosisResponse)`) — the shared `ImageRequest`/`DiagnosisResponse` messages mean this is additive and doesn't break existing clients.
 
 ## 🛠️ Backend Tech Stack
 
-* **Languages:** Go (v1.22+), Python (v3.11+)
-* **Communication Protocols:** gRPC over HTTP/2, Protocol Buffers (Proto3)
-* **Frameworks:** FastAPI, ONNX Runtime
-* **Databases & Infrastructure:** PostgreSQL, RabbitMQ, Docker & Docker Compose
+* **Languages:** Go (1.25+), Python (3.12+)
+* **Communication:** gRPC over HTTP/2, Protocol Buffers (proto3)
+* **Frameworks:** net/http + Viper (Go), FastAPI + ONNX Runtime + pydantic-settings (Python)
+* **Infrastructure:** PostgreSQL, Docker & Docker Compose
 
 ## 🚀 Local Development Setup
 
-### 1. Compile Protocol Buffers
-From the root directory, compile your `.proto` files into native Go schemas and Python stubs:
-```bash
-# Compile for Go
-protoc --go_out=. --go-grpc_out=. proto/triage.proto
+### 1. Copy the env file
 
-# Compile for Python
-python -m grpc_tools.camel_case_to_lower_strict --python_out=. --grpc_python_out=. proto/triage.proto
+```bash
+cp .env.example .env
 ```
 
-### 2. Launch Local Environment (Docker Compose)
-Simulate the production environment locally on your development system using a lightweight containerized stack:
+### 2. Compile Protocol Buffers
+
 ```bash
-docker-compose up -d --build
+make proto        # both Go and Python stubs
+make proto-go      # Go only
+make proto-python  # Python only (requires services/ai-inference/.venv, see `make build-inference`)
+```
+
+### 3. Run natively (no Docker)
+
+```bash
+make build-inference   # creates the Python venv and installs dependencies
+make run-inference      # starts the gRPC + health server on :50051 / :8000
+
+make run-gateway        # in a second terminal, starts the HTTP gateway on :8080
+```
+
+### 4. Or run everything with Docker Compose
+
+```bash
+make docker-up
+# gateway:      http://localhost:8080/healthz
+# ai-inference: http://localhost:8000/healthz  (gRPC on :50051)
+# postgres:     localhost:5432
+```
+
+### 5. Try it
+
+```bash
+curl -F "image=@sample_ultrasound.png" http://localhost:8080/v1/diagnose/breast-cancer
+```
+
+```json
+{
+  "predicted_class": "benign",
+  "class_confidences": [
+    { "label": "benign", "confidence": 0.91 },
+    { "label": "malignant", "confidence": 0.05 },
+    { "label": "normal", "confidence": 0.04 }
+  ],
+  "model_version": "omnimed-breast-ultrasound-v1.0.0",
+  "request_id": "..."
+}
 ```
 
 ---
 *Developed as a Final Year Project at The ICT University.*
-
