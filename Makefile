@@ -33,6 +33,10 @@ proto-python:
 		--grpc_python_out=$(INFERENCE_DIR)/app/pb \
 		--pyi_out=$(INFERENCE_DIR)/app/pb \
 		$(PROTO_DIR)/triage.proto
+	# grpc_tools emits a bare "import triage_pb2", which breaks once
+	# these stubs live inside the app.pb package — rewrite it to a
+	# package-relative import.
+	$(VENV_BIN)/python -c "import pathlib; p = pathlib.Path('$(INFERENCE_DIR)/app/pb/triage_pb2_grpc.py'); p.write_text(p.read_text().replace('import triage_pb2 as triage__pb2', 'from . import triage_pb2 as triage__pb2'))"
 
 # --- Go gateway --------------------------------------------------------
 

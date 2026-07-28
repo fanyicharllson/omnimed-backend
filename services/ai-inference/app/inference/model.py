@@ -35,12 +35,25 @@ class BreastCancerModel:
         returns a label -> confidence mapping.
         """
         outputs = self._session.run([self._output_name], {self._input_name: input_tensor})
-        probabilities = np.asarray(outputs[0]).reshape(-1)
+        logits = np.asarray(outputs[0]).reshape(-1)
 
-        if len(probabilities) != len(self._labels):
+        if len(logits) != len(self._labels):
             raise ValueError(
-                f"model produced {len(probabilities)} outputs but "
+                f"model produced {len(logits)} outputs but "
                 f"{len(self._labels)} labels are configured"
             )
 
+        probabilities = _softmax(logits)
+
         return {label: float(prob) for label, prob in zip(self._labels, probabilities)}
+
+
+def _softmax(logits: np.ndarray) -> np.ndarray:
+    # The exported graph's output is named "output_probabilities" but is
+    # actually raw logits (PyTorch's CrossEntropyLoss applies softmax
+    # internally during training, so the traced inference graph stops
+    # short of it) — softmax here so confidences are a valid, non-negative
+    # distribution that sums to 1.
+    shifted = logits - np.max(logits)
+    exp = np.exp(shifted)
+    return exp / np.sum(exp)
