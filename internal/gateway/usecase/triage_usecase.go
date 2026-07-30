@@ -28,32 +28,29 @@ type TriageClient interface {
 	DiagnoseBreastCancer(ctx context.Context, req *triagepb.ImageRequest) (*triagepb.DiagnosisResponse, error)
 }
 
-// ClassConfidence mirrors the proto message as a plain Go type so the
-// delivery layer doesn't need to depend on generated pb types directly.
-type ClassConfidence struct {
-	Label      string  `json:"label"`
-	Confidence float32 `json:"confidence"`
-}
-
 // DiagnosisResult is the usecase-level result returned to the delivery
-// layer for JSON serialization.
+// layer for JSON serialization. It is produced by DecisionPolicy.Evaluate
+// rather than by trusting the inference service's raw argmax.
 type DiagnosisResult struct {
-	PredictedClass   string            `json:"predicted_class"`
-	ClassConfidences []ClassConfidence `json:"class_confidences"`
-	ModelVersion     string            `json:"model_version"`
-	RequestID        string            `json:"request_id"`
+	RiskTier         RiskTier           `json:"risk_tier"`
+	RawProbabilities map[string]float32 `json:"raw_probabilities"`
+	Confidence       float32            `json:"confidence"`
+	ModelVersion     string             `json:"model_version"`
+	Disclaimer       string             `json:"disclaimer"`
+	RequestID        string             `json:"request_id"`
 }
 
 // TriageUsecase validates uploads and orchestrates diagnosis requests
 // against the AI inference service.
 type TriageUsecase struct {
 	client TriageClient
+	policy *DecisionPolicy
 	logger *slog.Logger
 }
 
 // NewTriageUsecase constructs a TriageUsecase.
-func NewTriageUsecase(client TriageClient, logger *slog.Logger) *TriageUsecase {
-	return &TriageUsecase{client: client, logger: logger}
+func NewTriageUsecase(client TriageClient, policy *DecisionPolicy, logger *slog.Logger) *TriageUsecase {
+	return &TriageUsecase{client: client, policy: policy, logger: logger}
 }
 
 // DiagnoseBreastCancer validates the uploaded image and forwards it to
@@ -73,21 +70,17 @@ func (u *TriageUsecase) DiagnoseBreastCancer(ctx context.Context, imageData []by
 		return nil, fmt.Errorf("diagnose breast cancer: %w", err)
 	}
 
-	result := &DiagnosisResult{
-		PredictedClass: resp.GetPredictedClass(),
-		ModelVersion:   resp.GetModelVersion(),
-		RequestID:      resp.GetRequestId(),
-	}
+	rawProbabilities := make(map[string]float32, len(resp.GetClassConfidences()))
 	for _, c := range resp.GetClassConfidences() {
-		result.ClassConfidences = append(result.ClassConfidences, ClassConfidence{
-			Label:      c.GetLabel(),
-			Confidence: c.GetConfidence(),
-		})
+		rawProbabilities[c.GetLabel()] = c.GetConfidence()
 	}
+
+	result := u.policy.Evaluate(rawProbabilities, resp.GetModelVersion(), requestID)
 
 	u.logger.Info("diagnosis completed",
 		"request_id", requestID,
-		"predicted_class", result.PredictedClass,
+		"risk_tier", result.RiskTier,
+		"confidence", result.Confidence,
 		"model_version", result.ModelVersion,
 	)
 

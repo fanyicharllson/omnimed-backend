@@ -20,6 +20,13 @@ type Config struct {
 	InferenceGRPCPort string `mapstructure:"INFERENCE_GRPC_PORT"`
 	InferenceTimeoutS int    `mapstructure:"INFERENCE_TIMEOUT_SECONDS"`
 
+	// MalignantFlagThreshold and MinConfidenceFloor tune the triage
+	// decision policy (internal/gateway/usecase/decision_policy.go).
+	// Kept as env-configurable knobs rather than constants since these
+	// will be re-tuned as more validation data comes in.
+	MalignantFlagThreshold float32 `mapstructure:"MALIGNANT_FLAG_THRESHOLD"`
+	MinConfidenceFloor     float32 `mapstructure:"MIN_CONFIDENCE_FLOOR"`
+
 	// Postgres is not wired to any repository yet — there is no
 	// persistence need until user accounts / medical logs land.
 	// The DSN is parsed and held here so that addition is config-only.
@@ -63,6 +70,8 @@ func Load() (*Config, error) {
 	v.SetDefault("INFERENCE_GRPC_HOST", "localhost")
 	v.SetDefault("INFERENCE_GRPC_PORT", "50051")
 	v.SetDefault("INFERENCE_TIMEOUT_SECONDS", 30)
+	v.SetDefault("MALIGNANT_FLAG_THRESHOLD", 0.3)
+	v.SetDefault("MIN_CONFIDENCE_FLOOR", 0.4)
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_PORT", "5432")
 	v.SetDefault("POSTGRES_USER", "omnimed")

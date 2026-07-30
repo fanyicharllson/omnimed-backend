@@ -125,16 +125,20 @@ curl -F "image=@sample_ultrasound.png" http://localhost:8080/v1/diagnose/breast-
 
 ```json
 {
-  "predicted_class": "benign",
-  "class_confidences": [
-    { "label": "benign", "confidence": 0.91 },
-    { "label": "malignant", "confidence": 0.05 },
-    { "label": "normal", "confidence": 0.04 }
-  ],
+  "risk_tier": "likely_benign",
+  "raw_probabilities": {
+    "benign": 0.91,
+    "malignant": 0.05,
+    "normal": 0.04
+  },
+  "confidence": 0.91,
   "model_version": "omnimed-breast-ultrasound-v1.0.0",
+  "disclaimer": "This is an AI screening aid, not a medical diagnosis. All results must be reviewed and confirmed by a qualified clinician before any clinical decision is made.",
   "request_id": "..."
 }
 ```
+
+`risk_tier` is produced by a decision policy (`internal/gateway/usecase/decision_policy.go`), not raw argmax: a `malignant` probability at or above `MALIGNANT_FLAG_THRESHOLD` (default `0.3`) always yields `flagged_for_review`, even if it isn't the top class. Otherwise, if the best remaining probability is below `MIN_CONFIDENCE_FLOOR` (default `0.4`), the result is `inconclusive` rather than a false-confident `likely_benign`. Both thresholds are env-configurable — see `.env.example`.
 
 ---
 *Developed as a Final Year Project at The ICT University.*

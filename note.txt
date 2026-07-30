@@ -1,0 +1,50 @@
+Ports
+Service	Port	Protocol	Who calls it
+Go gateway	8080	HTTP	You (external clients)
+AI inference	50051	gRPC	Only the gateway
+AI inference	8000	HTTP	Just its own /healthz (for docker-compose/orchestrator probes) — not part of the app's business API
+PostgreSQL	5432	TCP	Not wired to anything yet (placeholder)
+So your base URL as a client is http://localhost:8080, e.g.:
+
+
+POST http://localhost:8080/v1/diagnose/breast-cancer
+GET  http://localhost:8080/healthz
+
+Running the inference service locally
+
+make build-inference   # one-time: creates the venv + installs deps
+make run-inference      # starts gRPC (:50051) + health API (:8000)
+Full list of make commands
+Command	What it does
+make proto	Regenerates both Go and Python stubs from api/proto/triage.proto
+make proto-go	Regenerates only the Go stubs into pb/triage/
+make proto-python	Regenerates only the Python stubs into services/ai-inference/app/pb/ (also patches the import-path bug in grpc_tools' output)
+make tidy	Runs go mod tidy
+make build-gateway	Compiles the Go gateway to bin/gateway
+make run-gateway	Builds then runs the gateway on :8080
+make build-inference	Creates the Python venv and installs requirements.txt
+make run-inference	Runs the inference service (gRPC :50051 + health :8000)
+make docker-build	docker compose build for all 3 services
+make docker-up	docker compose up -d --build — gateway + inference + postgres, wired togethe together
+make docker-down	Tears the compose stack down
+For local dev without Docker, the order is: make build-inference → make run-inference (terminal 1) → make run-gateway (terminal 2). Or just make docker-up to get everything at once.
+
+
+mbilr app
+ow the mobile frontend should read this
+The important shift is: the app should branch UI on risk_tier, never on which raw probability is numerically highest. That's the whole point of the policy — it already did the safety-biased reasoning server-side so the client doesn't have to re-derive it (and risk getting the asymmetric logic wrong or drifting from the backend if thresholds get retuned).
+
+Suggested handling per tier:
+Suggested handling per tier:
+
+risk_tier	Suggested mobile UX
+likely_benign	Calm/green state. Show confidence as "X% confidence", show the disclaimer in smaller print, no urgent CTA.
+flagged_for_review	Red/amber alert state. Lead with "please consult a clinician," not with the raw percentage — showing a bare "35% malignant" without context reads as scarier or vaguer than the tier label. Make the disclaimer prominent, not an afterthought.
+inconclusive	Neutral/warning state, distinct from both above. Message should be actionable: "retake a clearer image" / "ensure good lighting and focus," not "we don't know."
+Practical notes for the Flutter side:
+raw_probabilities is a Map<String, double> — useful for an optional "see detailed breakdown" expandable view, but shouldn't drive the primary state of the screen.
+disclaimer is static text from the backend, not something to hardcode client-side — if you ever want to change the wording, it changes in one place (the Go usecase) and every client picks it up automatically, no app release needed.
+request_id — worth stashing (e.g. attached to a "report an issue with this result" flow), since it's the same ID correlated across both services' logs if you ever need to debug a specific diagnosis server-side.
+Since risk_tier is a fixed enum (likely_benign / flagged_for_review / inconclusive), model it as a Dart enum with a fromString mapping, and default unknown values to the most conservative UI state — that's a defensive habit worth having before skin/oral get added later, in case a future tier value ships before the app updates.
+
+This is genuinely a good thing to be able to say in your defense, by the way: "I initially targeted 95% recall, found it collapsed precision to 39% which would over-flag most patients, so I made a deliberate tradeoff decision to target 85% recall instead, prioritizing a usable triage system over a maximal-but-impractical one." That's you demonstrating real understanding, not just running code

@@ -41,7 +41,8 @@ func main() {
 	}
 	defer client.Close()
 
-	triageUsecase := usecase.NewTriageUsecase(client, log)
+	policy := usecase.NewDecisionPolicy(cfg.MalignantFlagThreshold, cfg.MinConfidenceFloor)
+	triageUsecase := usecase.NewTriageUsecase(client, policy, log)
 	handler := deliveryhttp.NewTriageHandler(triageUsecase, log)
 	authenticator := middleware.NewStubAuthenticator(log)
 	router := deliveryhttp.NewRouter(handler, authenticator, log)
