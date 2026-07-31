@@ -8,15 +8,25 @@ import (
 )
 
 // NewRouter wires the gateway's HTTP routes and middleware chain.
+//
+// HTTP is deliberately kept to image-upload diagnosis endpoints (which
+// need multipart/form-data) plus health/readiness checks. Everything
+// else client-facing (auth, session, medical logs) belongs on the
+// gateway's gRPC server (internal/gateway/delivery/grpc) instead.
+//
+// Adding a new modality is one line here plus a thin wrapper handler in
+// handler.go — see DiagnoseBreastCancer / /api/v1/diagnose/breast-cancer
+// as the template for /api/v1/diagnose/skin, /api/v1/diagnose/oral, etc.
 func NewRouter(handler *TriageHandler, authenticator middleware.Authenticator, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", handler.Health)
+	mux.HandleFunc("GET /readyz", handler.Readiness)
 
 	protected := middleware.Auth(authenticator, logger)(
 		http.HandlerFunc(handler.DiagnoseBreastCancer),
 	)
-	mux.Handle("POST /v1/diagnose/breast-cancer", protected)
+	mux.Handle("POST /api/v1/diagnose/breast-cancer", protected)
 
 	return requestLogger(logger)(mux)
 }

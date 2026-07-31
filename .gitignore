@@ -9,7 +9,7 @@ services/ai-inference/**/__pycache__/
 services/ai-inference/**/*.pyc
 
 # Env
-.env
+.env*
 
 # IDE / OS
 .idea/

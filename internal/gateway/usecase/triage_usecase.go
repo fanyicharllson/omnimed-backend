@@ -26,6 +26,7 @@ var allowedContentTypes = map[string]bool{
 // depending on the concrete gRPC implementation.
 type TriageClient interface {
 	DiagnoseBreastCancer(ctx context.Context, req *triagepb.ImageRequest) (*triagepb.DiagnosisResponse, error)
+	CheckHealth(ctx context.Context) error
 }
 
 // DiagnosisResult is the usecase-level result returned to the delivery
@@ -51,6 +52,12 @@ type TriageUsecase struct {
 // NewTriageUsecase constructs a TriageUsecase.
 func NewTriageUsecase(client TriageClient, policy *DecisionPolicy, logger *slog.Logger) *TriageUsecase {
 	return &TriageUsecase{client: client, policy: policy, logger: logger}
+}
+
+// CheckReadiness reports whether the AI inference service is reachable
+// and serving, via the standard gRPC health checking protocol.
+func (u *TriageUsecase) CheckReadiness(ctx context.Context) error {
+	return u.client.CheckHealth(ctx)
 }
 
 // DiagnoseBreastCancer validates the uploaded image and forwards it to

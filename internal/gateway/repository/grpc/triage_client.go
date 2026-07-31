@@ -11,13 +11,15 @@ import (
 	triagepb "github.com/fanyicharllson/omnimed-backend/pb/triage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // TriageClient talks to the AI inference service over gRPC.
 type TriageClient struct {
-	conn    *grpc.ClientConn
-	client  triagepb.TriageServiceClient
-	timeout time.Duration
+	conn        *grpc.ClientConn
+	client      triagepb.TriageServiceClient
+	healthCheck grpc_health_v1.HealthClient
+	timeout     time.Duration
 }
 
 // NewTriageClient dials the inference service at addr. The dial is
@@ -29,9 +31,10 @@ func NewTriageClient(addr string, timeout time.Duration) (*TriageClient, error) 
 	}
 
 	return &TriageClient{
-		conn:    conn,
-		client:  triagepb.NewTriageServiceClient(conn),
-		timeout: timeout,
+		conn:        conn,
+		client:      triagepb.NewTriageServiceClient(conn),
+		healthCheck: grpc_health_v1.NewHealthClient(conn),
+		timeout:     timeout,
 	}, nil
 }
 
@@ -52,4 +55,25 @@ func (c *TriageClient) DiagnoseBreastCancer(ctx context.Context, req *triagepb.I
 	}
 
 	return resp, nil
+}
+
+// CheckHealth asks the inference service's standard gRPC health
+// endpoint (grpc.health.v1) whether it is serving. It uses a short,
+// fixed timeout independent of the usual inference timeout, since a
+// health probe should fail fast rather than wait as long as a real
+// diagnosis call would.
+func (c *TriageClient) CheckHealth(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	resp, err := c.healthCheck.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
+	if err != nil {
+		return fmt.Errorf("triage client: health check: %w", err)
+	}
+
+	if resp.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
+		return fmt.Errorf("triage client: inference service status is %s", resp.GetStatus())
+	}
+
+	return nil
 }

@@ -48,3 +48,21 @@ request_id — worth stashing (e.g. attached to a "report an issue with this res
 Since risk_tier is a fixed enum (likely_benign / flagged_for_review / inconclusive), model it as a Dart enum with a fromString mapping, and default unknown values to the most conservative UI state — that's a defensive habit worth having before skin/oral get added later, in case a future tier value ships before the app updates.
 
 This is genuinely a good thing to be able to say in your defense, by the way: "I initially targeted 95% recall, found it collapsed precision to 39% which would over-flag most patients, so I made a deliberate tradeoff decision to target 85% recall instead, prioritizing a usable triage system over a maximal-but-impractical one." That's you demonstrating real understanding, not just running code
+
+
+why building app
+That's the sharpest question you've asked in this whole conversation, bro — and it's exactly the kind of question a defense panel will hit you with, so let's actually work through it instead of me just reassuring you.
+
+You're right that in a **well-resourced hospital** — radiologist on staff, same-day reads, no backlog — your app adds close to zero value. If the doctor's already telling the patient the result in the room, an app giving a second, less-accurate opinion is redundant at best. That critique has real teeth and you should take it seriously rather than wave it away.
+
+But that's not the only real-world scenario, and here's where genuine value shows up — especially relevant given you're building this in Cameroon:
+
+**1. Radiologist turnaround time isn't instant, even when the scan is.** A sonographer/technician often runs the ultrasound machine, but the actual **radiologist's written report** — the official interpretation — can take days, sometimes longer, especially outside major private hospitals. The patient walks out with a printed scan and a "come back for your results" appointment. That gap is real, and it's exactly where a triage signal has value: "this looks like it may need urgent follow-up" vs "this looks low-concern, your scheduled follow-up is fine" changes how anxiously — or how urgently — someone chases that appointment.
+
+**2. Radiologist shortage / access gap in exactly your context.** Not every clinic that owns an ultrasound machine has a radiologist on-site to read it. Smaller clinics or district hospitals sometimes have the equipment and a technician who can operate it, but the actual scan gets sent elsewhere (sometimes another city) for interpretation. In that gap, a triage tool that flags "this looks concerning, escalate/prioritize this case" is genuinely useful — not to replace the radiologist, but to help prioritize *which* scans get urgent attention first while everyone waits for the real read.
+
+**3. Patient follow-through is a known real-world problem.** A meaningful number of patients never return for their results — cost, distance, fear, forgetting. Anything that gives a patient an early signal in-hand (with a clear "please still see a doctor" disclaimer) can nudge urgency for people who might otherwise let a concerning finding slip through the cracks.
+
+**The honest framing for your defense isn't "this replaces the hospital"** — it's "this closes the gap between when the scan happens and when a qualified human actually interprets it, particularly in settings where that gap is real." That's a legitimate, non-oversold value proposition, and it's more specific and more defensible than a vague "AI health app" pitch.
+
+Worth being honest with yourself, though: this reasoning matters more for breast cancer (where a specialist read is the bottleneck) than it might for skin cancer, where the phone-photo pipeline could genuinely serve someone who has no plan to see a doctor at all otherwise. Different diseases in your system may have slightly different "why does this app need to exist" answers — and being able to articulate that per-disease, rather than one blanket answer, will make you look sharp in front of a panel.

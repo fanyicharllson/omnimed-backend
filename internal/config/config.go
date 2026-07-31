@@ -16,6 +16,12 @@ type Config struct {
 
 	HTTPPort string `mapstructure:"GATEWAY_HTTP_PORT"`
 
+	// GRPCPort is the gateway's own gRPC server (internal/gateway/delivery/grpc),
+	// separate from HTTPPort. HTTP only ever serves image-upload diagnosis
+	// endpoints and health checks; every other client-facing operation
+	// (auth, session, medical logs) is added to this gRPC server instead.
+	GRPCPort string `mapstructure:"GATEWAY_GRPC_PORT"`
+
 	InferenceGRPCHost string `mapstructure:"INFERENCE_GRPC_HOST"`
 	InferenceGRPCPort string `mapstructure:"INFERENCE_GRPC_PORT"`
 	InferenceTimeoutS int    `mapstructure:"INFERENCE_TIMEOUT_SECONDS"`
@@ -67,10 +73,11 @@ func Load() (*Config, error) {
 	v.SetDefault("ENVIRONMENT", "development")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("GATEWAY_HTTP_PORT", "8080")
+	v.SetDefault("GATEWAY_GRPC_PORT", "9090")
 	v.SetDefault("INFERENCE_GRPC_HOST", "localhost")
 	v.SetDefault("INFERENCE_GRPC_PORT", "50051")
 	v.SetDefault("INFERENCE_TIMEOUT_SECONDS", 30)
-	v.SetDefault("MALIGNANT_FLAG_THRESHOLD", 0.3)
+	v.SetDefault("MALIGNANT_FLAG_THRESHOLD", 0.179)
 	v.SetDefault("MIN_CONFIDENCE_FLOOR", 0.4)
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_PORT", "5432")
